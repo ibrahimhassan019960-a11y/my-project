@@ -4,8 +4,9 @@ from scipy.signal import lfilter, butter, fftconvolve
 
 SR = 48000
 import os
-V15 = os.environ.get('V15') == '1'
-DUR = 15.0 if V15 else 30.0
+VER = os.environ.get('VER', '15' if os.environ.get('V15') == '1' else '30')
+V15 = VER == '15'
+DUR = {'30': 30.0, '15': 15.0, '30v': 31.5, '15v': 15.0}[VER]
 N = int(SR * DUR)
 BEAT = 0.5                     # 120 BPM, 15 video frames per beat
 DROP, END = 12.5, 25.5
@@ -120,7 +121,31 @@ def section(t0, t1, full=True, drums=True):
             if full: add(Hc, b, 0.18, -0.3); add(Hc, b + 0.125, 0.1, 0.4); add(Hc, b + 0.375, 0.1, -0.4)
         b += BEAT
 
-if V15:
+def plan(hook, rs, drop, end, cuts):
+    """hook groove -> filtered BEFORE bed -> riser from rs -> drop -> tagline at end"""
+    add(impact(), 0.0, 0.8)
+    section(0.0, hook, True)
+    add(whoosh(0.5, False), hook - 0.25, 0.6)
+    add(impact(), hook, 0.45)
+    section(hook, rs, False)
+    add(riser(drop - rs), rs, 0.55)
+    r, step = rs, 0.25
+    while r < drop - 0.1:
+        add(C, r, 0.18 + 0.3 * (r - rs) / (drop - rs)); r += step; step = max(0.0625, step * 0.8)
+    add(impact(), drop, 1.0)
+    section(drop, end, True)
+    for t in cuts: add(whoosh(0.5), t - 0.35, 0.35)
+    add(impact(), end, 0.9)
+    add(pad(CH[0], DUR - end + 0.1, 1600), end, 1.4)
+    add(bass(ROOT[0], 3.0) * np.exp(-np.arange(at(3.0)) / SR * 0.9), end, 0.6)
+    add(Ho, end, 0.4)
+    add(whoosh(0.8, True), end + 1.05, 0.3)
+
+if VER == '30v':
+    plan(4.0, 12.5, 14.0, 27.0, (17.0, 20.0, 24.0))
+elif VER == '15v':
+    plan(1.5, 6.0, 7.0, 11.0, (9.0,))
+elif V15:
     add(impact(), 0.0, 0.8)
     section(0.0, 1.5, True)
     add(whoosh(0.5, False), 1.25, 0.6)
@@ -169,7 +194,7 @@ mix = reverb(mix, 1.2, 0.18)
 fo = at(1.2); mix[-fo:] *= np.linspace(1, 0, fo)[:, None]
 mix /= np.abs(mix).max() + 1e-9
 mix = np.tanh(mix * 1.4) / np.tanh(1.4) * 0.89
-with wave.open('music15.wav' if V15 else 'music.wav', 'wb') as w:
+with wave.open({'30': 'music.wav', '15': 'music15.wav'}.get(VER, f'music_{VER}.wav'), 'wb') as w:
     w.setnchannels(2); w.setsampwidth(2); w.setframerate(SR)
     w.writeframes((mix * 32767).astype(np.int16).tobytes())
 print('ok')

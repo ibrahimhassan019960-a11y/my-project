@@ -199,11 +199,37 @@ SHOTS15 = [
     dict(seg='s8', n=60, kind='W', crop=[(424, 200, 700), (424, 215, 660)]),
     dict(seg='s11', n=105, kind='W', crop=[(402, 239, 700), (402, 228, 580)], flash=True),
 ]
-V15 = os.environ.get('V15') == '1'
-if V15: SHOTS = SHOTS15
+# voice versions: the BEFORE part plays the technician's own words, subtitled
+SHOTS30V = [
+    dict(seg='s1', n=60, kind='T', crop=[(424, 225, 478), (424, 205, 410)], flash=True),
+    dict(seg='s2', n=60, kind='W', follow=True, crop=[(None, 239, 700), (None, 239, 660)], rgbout=True),
+    dict(seg='v1', n=99, kind='T', crop=[(330, 239, 478), (330, 232, 455)], flash=True, rgbin=True, pop=True),
+    dict(seg='v2', n=153, kind='W', crop=[(470, 239, 700), (470, 239, 680)]),
+    dict(seg=None, n=48, kind='CARD'),
+    dict(seg='s6', n=90, kind='SPLIT', flash=True),
+    dict(seg='s7', n=90, kind='W', crop=[(402, 239, 700), (402, 239, 700)]),
+    dict(seg='s8', n=120, kind='W', crop=[(424, 200, 700), (424, 220, 640)]),
+    dict(seg='s9', n=90, kind='W', crop=[(470, 239, 700), (470, 239, 680)]),
+    dict(seg='s11', n=135, kind='W', crop=[(402, 239, 700), (402, 226, 560)], flash=True),
+]
+SHOTS15V = [
+    dict(seg='s1', n=45, kind='T', crop=[(424, 225, 478), (424, 210, 420)], flash=True, rgbout=True),
+    dict(seg='v2b', n=165, kind='W', crop=[(470, 239, 700), (470, 239, 670)], flash=True, rgbin=True, pop=True),
+    dict(seg='s6', n=60, kind='SPLIT', flash=True),
+    dict(seg='s7', n=60, kind='W', crop=[(402, 239, 700), (402, 239, 700)]),
+    dict(seg='s11', n=120, kind='W', crop=[(402, 239, 700), (402, 228, 570)], flash=True),
+]
+# (start, end, text) in output seconds; text reconstructed from the original audio
+SUBS30V = [(4.10, 5.58, 'المسطرة زي ما انتو عارفين'), (5.58, 7.28, 'بتيجي سادة.. مفيهاش ليد'),
+           (7.35, 10.95, 'إحنا دلوقتي هنظبط المسطرة'), (11.03, 12.38, 'ونركب ليد')]
+SUBS15V = [(1.65, 5.20, 'إحنا دلوقتي هنظبط المسطرة'), (5.33, 6.95, 'ونركب ليد')]
+VER = os.environ.get('VER', '15' if os.environ.get('V15') == '1' else '30')
+V15 = VER == '15'
+SHOTS = {'30': SHOTS, '15': SHOTS15, '30v': SHOTS30V, '15v': SHOTS15V}[VER]
+SUBS = {'30v': SUBS30V, '15v': SUBS15V}.get(VER, [])
 
 S = {}
-for n in ['s1', 's2', 's3', 's4', 's5', 's6a', 's6b', 's7', 's8', 's9', 's11']:
+for n in ['s1', 's2', 's3', 's4', 's5', 's6a', 's6b', 's7', 's8', 's9', 's11', 'v1', 'v2', 'v2b']:
     S[n] = load(n)
 
 # text sprites
@@ -342,6 +368,12 @@ def render(si, sh, i, gidx):
             put(frame, P_BEFORE, 540, 250, 1.0)
         cap = {'s3': T_C3, 's4': T_C4, 's5': T_C5}[seg]
         text_in(frame, cap, 540, (bottom + 85) if kind == 'W' else 1500, t, 0.08)
+    elif seg in ('v1', 'v2', 'v2b'):
+        if sh.get('pop'):
+            sc = 1 + 0.5 * (1 - ease(t / 0.35))
+            put(frame, P_BEFORE, 540, 250, ease(t / 0.2), sc)
+        else:
+            put(frame, P_BEFORE, 540, 250, 1.0)
     elif seg == 's7':
         sc = 1 + 0.5 * (1 - ease(t / 0.35))
         put(frame, P_AFTER, 540, 270, ease(t / 0.2), sc)
@@ -376,10 +408,35 @@ def render(si, sh, i, gidx):
         text_in(frame, T_END3, 540, 330, t, 1.6)
     return frame
 
+def sub_sprite(txt):
+    key = ('sub', txt)
+    if key in _cache: return _cache[key]
+    F = font(CAIRO, 58, 800)
+    tw = int(F.getlength(txt, direction='rtl'))
+    asc, desc = F.getmetrics()
+    padx, pady, m = 34, 10, 30
+    bw, bh = tw + 2 * padx, asc + desc + 2 * pady
+    img = Image.new('RGBA', (bw + 2 * m, bh + 2 * m), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle((m, m, m + bw, m + bh), radius=18, fill=(0, 0, 0, 170))
+    d.rounded_rectangle((m + bw - 8, m + 14, m + bw - 2, m + bh - 14), radius=3, fill=ACCENT + (255,))
+    d.text((m + padx, m + pady), txt, font=F, fill=(255, 255, 255, 255), direction='rtl')
+    a = np.asarray(img).astype(np.float32) / 255
+    _cache[key] = (a[..., :3][..., ::-1] * a[..., 3:4], a[..., 3:4])
+    return _cache[key]
+
+def draw_subs(frame, gt, sh):
+    y = 1500 if sh['kind'] == 'T' else 470 + WIN_W[0] + 95
+    for a, b, txt in SUBS:
+        if a - 0.01 <= gt < b:
+            k = ease((gt - a) / 0.18)
+            op = k * (1 - eio((gt - (b - 0.12)) / 0.12))
+            put(frame, sub_sprite(txt), 540, y + (1 - k) * 18, op, 0.96 + 0.04 * k)
+
 # card background: a blurred frame of the finished car
 CARD_BASE = background(blur_plate(S['s11'][60], 's11', 60)) * 1.6
 
-out = ('reel_video15.mp4' if V15 else 'reel_video.mp4') if not PREVIEW else 'preview.mp4'
+out = f'reel_video_{VER}.mp4' if not PREVIEW else 'preview.mp4'
 enc = subprocess.Popen(['ffmpeg', '-nostdin', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{W}x{H}', '-r', str(FPS), '-i', '-',
                         '-c:v', 'libx264', '-preset', 'slow' if not PREVIEW else 'veryfast', '-crf', '16', '-pix_fmt', 'yuv420p', out], stdin=subprocess.PIPE)
 g = 0
@@ -390,6 +447,7 @@ for si, sh in enumerate(SHOTS):
         if PREVIEW and snaps and g not in snaps:
             g += 1; continue
         f = render(si, sh, i, g)
+        draw_subs(f, g / FPS, sh)
         f *= VIG
         if sh.get('flash') and i < 6:
             f += (1 - i / 6) ** 2 * 140
