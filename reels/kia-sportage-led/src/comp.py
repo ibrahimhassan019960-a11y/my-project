@@ -1,4 +1,4 @@
-import cv2, numpy as np, json, subprocess, sys, math
+import cv2, numpy as np, json, subprocess, sys, math, os
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 W, H, FPS = 1080, 1920, 30
@@ -189,6 +189,19 @@ SHOTS = [
     dict(seg='s11', n=135, kind='W', crop=[(402, 239, 700), (402, 226, 560)], flash=True),
 ]
 
+# 15-second cut: hook -> BEFORE -> split (drop on beat 10) -> AFTER -> detail -> tagline
+SHOTS15 = [
+    dict(seg='s1', n=45, kind='T', crop=[(424, 225, 478), (424, 210, 420)], flash=True, rgbout=True),
+    dict(seg='s3', n=60, kind='T', crop=[(330, 239, 478), (330, 232, 455)], flash=True, rgbin=True),
+    dict(seg='s4', n=45, kind='T', crop=[(300, 239, 478), (300, 239, 478)]),
+    dict(seg='s6', n=75, kind='SPLIT', flash=True),
+    dict(seg='s7', n=60, kind='W', crop=[(402, 239, 700), (402, 239, 700)]),
+    dict(seg='s8', n=60, kind='W', crop=[(424, 200, 700), (424, 215, 660)]),
+    dict(seg='s11', n=105, kind='W', crop=[(402, 239, 700), (402, 228, 580)], flash=True),
+]
+V15 = os.environ.get('V15') == '1'
+if V15: SHOTS = SHOTS15
+
 S = {}
 for n in ['s1', 's2', 's3', 's4', 's5', 's6a', 's6b', 's7', 's8', 's9', 's11']:
     S[n] = load(n)
@@ -366,7 +379,7 @@ def render(si, sh, i, gidx):
 # card background: a blurred frame of the finished car
 CARD_BASE = background(blur_plate(S['s11'][60], 's11', 60)) * 1.6
 
-out = 'reel_video.mp4' if not PREVIEW else 'preview.mp4'
+out = ('reel_video15.mp4' if V15 else 'reel_video.mp4') if not PREVIEW else 'preview.mp4'
 enc = subprocess.Popen(['ffmpeg', '-nostdin', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{W}x{H}', '-r', str(FPS), '-i', '-',
                         '-c:v', 'libx264', '-preset', 'slow' if not PREVIEW else 'veryfast', '-crf', '16', '-pix_fmt', 'yuv420p', out], stdin=subprocess.PIPE)
 g = 0

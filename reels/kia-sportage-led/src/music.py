@@ -3,7 +3,9 @@ import numpy as np, wave
 from scipy.signal import lfilter, butter, fftconvolve
 
 SR = 48000
-DUR = 30.0
+import os
+V15 = os.environ.get('V15') == '1'
+DUR = 15.0 if V15 else 30.0
 N = int(SR * DUR)
 BEAT = 0.5                     # 120 BPM, 15 video frames per beat
 DROP, END = 12.5, 25.5
@@ -118,37 +120,56 @@ def section(t0, t1, full=True, drums=True):
             if full: add(Hc, b, 0.18, -0.3); add(Hc, b + 0.125, 0.1, 0.4); add(Hc, b + 0.375, 0.1, -0.4)
         b += BEAT
 
-# hook: hit + full groove
-add(impact(), 0.0, 0.8)
-section(0.0, 4.0, True)
-# BEFORE: filtered, sparse
-add(whoosh(0.5, False), 3.75, 0.6)
-add(impact(), 4.0, 0.45)
-section(4.0, 11.0, False)
-for t in (6.0, 8.0): add(whoosh(0.45), t - 0.3, 0.25)
-# transition card: riser + snare roll, then cut
-add(riser(1.5), 11.0, 0.55)
-r = 11.0
-step = 0.25
-while r < 12.4:
-    add(C, r, 0.18 + 0.3 * (r - 11) / 1.4); r += step; step = max(0.0625, step * 0.8)
-# DROP / AFTER
-add(impact(), DROP, 1.0)
-section(DROP, END, True)
-for t in (15.5, 18.5, 22.5): add(whoosh(0.5), t - 0.35, 0.35)
-# ending
-add(impact(), END, 0.9)
-add(pad(CH[0], 4.6, 1600), END, 1.4)
-add(bass(ROOT[0], 3.5) * np.exp(-np.arange(at(3.5)) / SR * 0.9), END, 0.6)
-add(Ho, END, 0.4)
-add(whoosh(0.8, True), 25.55 + 1.0, 0.3)  # under the "فرق كبير" pop
+if V15:
+    add(impact(), 0.0, 0.8)
+    section(0.0, 1.5, True)
+    add(whoosh(0.5, False), 1.25, 0.6)
+    add(impact(), 1.5, 0.45)
+    section(1.5, 4.0, False)
+    add(riser(1.0), 4.0, 0.55)
+    r, step = 4.0, 0.2
+    while r < 4.9:
+        add(C, r, 0.18 + 0.3 * (r - 4.0) / 0.9); r += step; step = max(0.0625, step * 0.8)
+    add(impact(), 5.0, 1.0)
+    section(5.0, 11.5, True)
+    for t in (7.5, 9.5): add(whoosh(0.5), t - 0.35, 0.35)
+    add(impact(), 11.5, 0.9)
+    add(pad(CH[0], 3.6, 1600), 11.5, 1.4)
+    add(bass(ROOT[0], 3.0) * np.exp(-np.arange(at(3.0)) / SR * 0.9), 11.5, 0.6)
+    add(Ho, 11.5, 0.4)
+    add(whoosh(0.8, True), 12.55, 0.3)
+else:
+    # hook: hit + full groove
+    add(impact(), 0.0, 0.8)
+    section(0.0, 4.0, True)
+    # BEFORE: filtered, sparse
+    add(whoosh(0.5, False), 3.75, 0.6)
+    add(impact(), 4.0, 0.45)
+    section(4.0, 11.0, False)
+    for t in (6.0, 8.0): add(whoosh(0.45), t - 0.3, 0.25)
+    # transition card: riser + snare roll, then cut
+    add(riser(1.5), 11.0, 0.55)
+    r = 11.0
+    step = 0.25
+    while r < 12.4:
+        add(C, r, 0.18 + 0.3 * (r - 11) / 1.4); r += step; step = max(0.0625, step * 0.8)
+    # DROP / AFTER
+    add(impact(), DROP, 1.0)
+    section(DROP, END, True)
+    for t in (15.5, 18.5, 22.5): add(whoosh(0.5), t - 0.35, 0.35)
+    # ending
+    add(impact(), END, 0.9)
+    add(pad(CH[0], 4.6, 1600), END, 1.4)
+    add(bass(ROOT[0], 3.5) * np.exp(-np.arange(at(3.5)) / SR * 0.9), END, 0.6)
+    add(Ho, END, 0.4)
+    add(whoosh(0.8, True), 25.55 + 1.0, 0.3)  # under the "فرق كبير" pop
 
 mix = reverb(mix, 1.2, 0.18)
 # fade out
 fo = at(1.2); mix[-fo:] *= np.linspace(1, 0, fo)[:, None]
 mix /= np.abs(mix).max() + 1e-9
 mix = np.tanh(mix * 1.4) / np.tanh(1.4) * 0.89
-with wave.open('music.wav', 'wb') as w:
+with wave.open('music15.wav' if V15 else 'music.wav', 'wb') as w:
     w.setnchannels(2); w.setsampwidth(2); w.setframerate(SR)
     w.writeframes((mix * 32767).astype(np.int16).tobytes())
 print('ok')
