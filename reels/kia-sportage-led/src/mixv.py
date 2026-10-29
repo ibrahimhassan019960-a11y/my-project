@@ -10,10 +10,10 @@ def clean(p):
         '-ac', '2', '-ar', str(SR), '-f', 's16le', '-'], capture_output=True, check=True).stdout
     return np.frombuffer(o, np.int16).reshape(-1, 2) / 32768
 if VER == '30v':
-    dur, voice = 31.5, [('v1', 4.0, 99), ('v2', 7.3, 153)]
+    dur, voice = 35.5, [('v1', 4.0, 99), ('v2', 7.3, 153)]
     amb = [('s1', 0, 60, .10), ('s2', 2.0, 60, .10), ('s6b', 14.0, 90, .10), ('s7', 17.0, 90, .10), ('s9', 24.0, 90, .12), ('s11', 27.0, 135, .10)]
 else:
-    dur, voice = 15.0, [('v2b', 1.5, 165)]
+    dur, voice = 19.0, [('v2b', 1.5, 165)]
     amb = [('s1', 0, 45, .10), ('s6b', 7.0, 60, .10), ('s7', 9.0, 60, .10), ('s11', 11.0, 120, .10)]
 N = int(dur * SR)
 mus = rd(f'music_{VER}.wav')[:N]

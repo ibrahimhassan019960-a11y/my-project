@@ -211,6 +211,7 @@ SHOTS30V = [
     dict(seg='s8', n=120, kind='W', crop=[(424, 200, 700), (424, 220, 640)]),
     dict(seg='s9', n=90, kind='W', crop=[(470, 239, 700), (470, 239, 680)]),
     dict(seg='s11', n=135, kind='W', crop=[(402, 239, 700), (402, 226, 560)], flash=True),
+    dict(seg=None, n=120, kind='END', flash=True),
 ]
 SHOTS15V = [
     dict(seg='s1', n=45, kind='T', crop=[(424, 225, 478), (424, 210, 420)], flash=True, rgbout=True),
@@ -218,6 +219,7 @@ SHOTS15V = [
     dict(seg='s6', n=60, kind='SPLIT', flash=True),
     dict(seg='s7', n=60, kind='W', crop=[(402, 239, 700), (402, 239, 700)]),
     dict(seg='s11', n=120, kind='W', crop=[(402, 239, 700), (402, 228, 570)], flash=True),
+    dict(seg=None, n=120, kind='END', flash=True),
 ]
 # (start, end, text) in output seconds; text reconstructed from the original audio
 SUBS30V = [(4.10, 5.58, 'المسطرة زي ما انتو عارفين'), (5.58, 7.28, 'بتيجي سادة.. مفيهاش ليد'),
@@ -300,6 +302,8 @@ def render(si, sh, i, gidx):
     kind = sh['kind']
     if kind == 'CARD':
         return render_card(i, n, CARD_BASE)
+    if kind == 'END':
+        return render_end(i, n)
     if kind == 'SPLIT':
         fa = S['s6a'][min(i, len(S['s6a']) - 1)]
         fb = blur_plate(S['s6b'][min(i, len(S['s6b']) - 1)], 's6b', i)
@@ -433,8 +437,46 @@ def draw_subs(frame, gt, sh):
             op = k * (1 - eio((gt - (b - 0.12)) / 0.12))
             put(frame, sub_sprite(txt), 540, y + (1 - k) * 18, op, 0.96 + 0.04 * k)
 
+T_CAR = sprite('CAR', MONT, 150, 900, fill=(255, 255, 255), track=10)
+T_ZONE = sprite('ZONE', MONT, 150, 900, fill=ACCENT, track=10, glow=(120, 0, 8))
+T_ENG = sprite('المهندس هاني الكهربائي', CAIRO, 80, 900)
+T_SRV1 = sprite('كهرباء السيارات', CAIRO, 56, 700, fill=(235, 235, 235))
+T_SRV2 = sprite('شحن التكييف', CAIRO, 56, 700, fill=(235, 235, 235))
+T_CZ_TAG = sprite('مركز صيانة كهرباء السيارات', CAIRO, 40, 600, fill=(185, 185, 185), shadow=False)
+
+def render_end(i, n):
+    t = i / FPS
+    frame = END_BASE.copy()
+    # logotype: CAR ZONE wipes in left -> right
+    k = ease((t - 0.1) / 0.6)
+    wcar, wzone = T_CAR[1].shape[1], T_ZONE[1].shape[1]
+    tot = wcar + wzone - 80 + 36
+    x0 = 540 - tot / 2
+    clip = (0, int(x0 + 20 + (tot + 40) * k))
+    put(frame, T_CAR, x0 + wcar / 2, 700, 1.0, clipx=clip)
+    put(frame, T_ZONE, x0 + wcar - 80 + 36 + wzone / 2, 700, 1.0, clipx=clip)
+    text_in(frame, T_CZ_TAG, 540, 812, t, 0.55, dy=20)
+    accent_line(frame, 540, 880, 640, t, 0.6, thick=5)
+    text_in(frame, T_ENG, 540, 985, t, 0.85)
+    # services with a red dot separator
+    ks = ease((t - 1.25) / 0.45)
+    y = 1105 + (1 - ks) * 30
+    w1, w2 = T_SRV1[1].shape[1] - 80, T_SRV2[1].shape[1] - 80
+    gap = 70
+    tot2 = w1 + w2 + gap
+    # Arabic reads right-to-left: first service on the right
+    put(frame, T_SRV1, 540 + tot2 / 2 - w1 / 2, y, ks)
+    put(frame, T_SRV2, 540 - tot2 / 2 + w2 / 2, y, ks)
+    if ks > 0:
+        ov = np.zeros((H, W, 3), np.float32)
+        dx = int(540 + tot2 / 2 - w1 - gap / 2)
+        cv2.circle(ov, (dx, int(y + 4)), 9, ACCENT[::-1], -1, cv2.LINE_AA)
+        add_glow_layer(frame, ov * ks, 1.2, 6)
+    return frame
+
 # card background: a blurred frame of the finished car
 CARD_BASE = background(blur_plate(S['s11'][60], 's11', 60)) * 1.6
+END_BASE = CARD_BASE * 0.6
 
 out = f'reel_video_{VER}.mp4' if not PREVIEW else 'preview.mp4'
 enc = subprocess.Popen(['ffmpeg', '-nostdin', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{W}x{H}', '-r', str(FPS), '-i', '-',

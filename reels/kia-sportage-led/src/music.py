@@ -6,7 +6,7 @@ SR = 48000
 import os
 VER = os.environ.get('VER', '15' if os.environ.get('V15') == '1' else '30')
 V15 = VER == '15'
-DUR = {'30': 30.0, '15': 15.0, '30v': 31.5, '15v': 15.0}[VER]
+DUR = {'30': 30.0, '15': 15.0, '30v': 35.5, '15v': 19.0}[VER]
 N = int(SR * DUR)
 BEAT = 0.5                     # 120 BPM, 15 video frames per beat
 DROP, END = 12.5, 25.5
@@ -121,7 +121,7 @@ def section(t0, t1, full=True, drums=True):
             if full: add(Hc, b, 0.18, -0.3); add(Hc, b + 0.125, 0.1, 0.4); add(Hc, b + 0.375, 0.1, -0.4)
         b += BEAT
 
-def plan(hook, rs, drop, end, cuts):
+def plan(hook, rs, drop, end, cuts, card=None):
     """hook groove -> filtered BEFORE bed -> riser from rs -> drop -> tagline at end"""
     add(impact(), 0.0, 0.8)
     section(0.0, hook, True)
@@ -140,11 +140,12 @@ def plan(hook, rs, drop, end, cuts):
     add(bass(ROOT[0], 3.0) * np.exp(-np.arange(at(3.0)) / SR * 0.9), end, 0.6)
     add(Ho, end, 0.4)
     add(whoosh(0.8, True), end + 1.05, 0.3)
+    if card: add(whoosh(0.6, True), card - 0.3, 0.45); add(impact(), card, 0.5); add(pad(CH[2], DUR - card + 0.1, 1300), card, 0.9)
 
 if VER == '30v':
-    plan(4.0, 12.5, 14.0, 27.0, (17.0, 20.0, 24.0))
+    plan(4.0, 12.5, 14.0, 27.0, (17.0, 20.0, 24.0), card=31.5)
 elif VER == '15v':
-    plan(1.5, 6.0, 7.0, 11.0, (9.0,))
+    plan(1.5, 6.0, 7.0, 11.0, (9.0,), card=15.0)
 elif V15:
     add(impact(), 0.0, 0.8)
     section(0.0, 1.5, True)
