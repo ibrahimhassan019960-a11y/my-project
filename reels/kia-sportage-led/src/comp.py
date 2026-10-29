@@ -22,6 +22,27 @@ def load(n):
         fr.append(f)
     return fr
 
+# ---------- studio look: dark, defocused workshop behind the technician ----------
+STUDIO = os.environ.get('STUDIO') == '1'
+MASKS = {}
+SY, SX = np.mgrid[0:478, 0:848].astype(np.float32)
+def studio(f, n, i):
+    if not STUDIO: return f
+    if n not in MASKS:
+        try: MASKS[n] = np.load(f'seg/{n}_mask.npy')
+        except FileNotFoundError: MASKS[n] = None
+    M = MASKS[n]
+    if M is None: return f
+    m = M[min(i, len(M) - 1)].astype(np.float32)[..., None] / 255
+    bg = cv2.GaussianBlur(f, (0, 0), 11).astype(np.float32)
+    g = bg.mean(2, keepdims=True); bg = g + (bg - g) * 0.6          # muted colours
+    # soft spotlight centred behind the technician
+    w = m[..., 0]; tot = w.sum() + 1e-6
+    cx, cy = (SX * w).sum() / tot, (SY * w).sum() / tot - 60
+    spot = 0.16 + 0.30 * np.exp(-(((SX - cx) / 260) ** 2 + ((SY - cy) / 220) ** 2))
+    bg = bg * spot[..., None]
+    return np.clip(f * m + bg * (1 - m), 0, 255).astype(np.uint8)
+
 # ---------- privacy: blur the customer's licence plate ----------
 def blur_plate(f, n, i):
     if n not in PL: return f
@@ -305,7 +326,7 @@ def render(si, sh, i, gidx):
     if kind == 'END':
         return render_end(i, n)
     if kind == 'SPLIT':
-        fa = S['s6a'][min(i, len(S['s6a']) - 1)]
+        fa = studio(S['s6a'][min(i, len(S['s6a']) - 1)], 's6a', i)
         fb = blur_plate(S['s6b'][min(i, len(S['s6b']) - 1)], 's6b', i)
         frame = background(fb)
         ph = 620
@@ -328,7 +349,7 @@ def render(si, sh, i, gidx):
 
     segname = sh['seg']
     fr = S[segname]
-    src = blur_plate(fr[min(i, len(fr) - 1)], segname, i)
+    src = studio(blur_plate(fr[min(i, len(fr) - 1)], segname, i), segname, i)
     frame = background(src)
     (cx0, cy0, cw0), (cx1, cy1, cw1) = sh['crop']
     kk = eio(k)
@@ -478,7 +499,7 @@ def render_end(i, n):
 CARD_BASE = background(blur_plate(S['s11'][60], 's11', 60)) * 1.6
 END_BASE = CARD_BASE * 0.6
 
-out = f'reel_video_{VER}.mp4' if not PREVIEW else 'preview.mp4'
+out = f'reel_video_{VER}{"_studio" if STUDIO else ""}.mp4' if not PREVIEW else 'preview.mp4'
 enc = subprocess.Popen(['ffmpeg', '-nostdin', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{W}x{H}', '-r', str(FPS), '-i', '-',
                         '-c:v', 'libx264', '-preset', 'slow' if not PREVIEW else 'veryfast', '-crf', '16', '-pix_fmt', 'yuv420p', out], stdin=subprocess.PIPE)
 g = 0
